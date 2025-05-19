@@ -2,6 +2,9 @@
 
 A comprehensive Retrieval-Augmented Generation (RAG) system using Cerebras inference and Weaviate vector database, with configurable Unstructured.io integration for processing various document types.
 
+![final_architecture_diagram](https://github.com/user-attachments/assets/71aa09c6-b919-494c-9b8c-84fae0b4d001)
+
+
 ## Features
 
 - **Document Processing**
