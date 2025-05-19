@@ -1,0 +1,60 @@
+# Document Processor Configuration
+# Set enable_unstructured_io to false to disable Unstructured.io integration
+
+# Main configuration
+enable_unstructured_io: true  # Set to false to disable Unstructured.io
+default_chunk_size: 1000
+default_chunk_overlap: 200
+max_file_size_mb: 50
+
+# Unstructured.io API configuration
+unstructured_io:
+  api_url: "https://api.unstructured.io/general/v0/general"
+  params:
+    strategy: "auto"
+    chunking_strategy: "by_title"
+  timeout_seconds: 60
+
+# Document type specific settings
+document_types:
+  pdf:
+    enabled: true
+    chunk_size: 1000
+    chunk_overlap: 200
+    extract_images: true
+    ocr_enabled: false
+  
+  docx:
+    enabled: true
+    chunk_size: 800
+    chunk_overlap: 150
+    extract_tables: true
+  
+  text:
+    enabled: true
+    chunk_size: 500
+    chunk_overlap: 100
+  
+  md:
+    enabled: true
+    chunk_size: 600
+    chunk_overlap: 100
+    
+  csv:
+    enabled: true
+    chunk_by_row: true
+    max_rows_per_chunk: 50
+    
+  html:
+    enabled: true
+    extract_main_content: true
+    remove_ads: true
+
+# Weaviate integration settings
+weaviate:
+  class_name: "DocumentContent"
+  batch_size: 50
+  vector_index_type: "hnsw"
+  vector_index_config:
+    ef: 128
+    maxConnections: 64
