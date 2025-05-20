@@ -2,6 +2,9 @@
 
 This plugin adds a pluggable LLM architecture to the Cerebras RAG application, allowing you to easily switch between different LLM providers (Cerebras, OpenAI, Anthropic, and Hugging Face) without changing the core application code.
 
+![final_architecture_diagram](https://github.com/user-attachments/assets/71aa09c6-b919-494c-9b8c-84fae0b4d001)
+
+
 ## Features
 
 - **Multiple LLM Provider Support**: Use Cerebras, OpenAI, Anthropic, or Hugging Face models
