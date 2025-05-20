@@ -1,8 +1,5 @@
-#!/usr/bin/env python3
 """
-Cerebras RAG Web Application
-----------------------------
-Flask web application for RAG with Cerebras inference and authentication.
+Updated webapp application with pluggable LLM provider support.
 """
 
 import os
@@ -31,6 +28,13 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from document_processor.processor import DocumentProcessorService
 
+# Import LLM provider factory
+from llm_providers import LLMProviderFactory, BaseLLMProvider
+from llm_providers.cerebras import CerebrasProvider
+from llm_providers.openai import OpenAIProvider
+from llm_providers.anthropic import AnthropicProvider
+from llm_providers.huggingface import HuggingFaceProvider
+
 # Initialize Flask app
 app = Flask(__name__)
 app.config.from_pyfile(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config', 'webapp.cfg'))
@@ -52,9 +56,26 @@ weaviate_client = weaviate.Client(
     auth_client_secret=auth_config
 )
 
-# Initialize Cerebras API
-cerebras_api_key = os.getenv("CEREBRAS_API_KEY")
-cerebras_api_url = os.getenv("CEREBRAS_API_URL", "https://api.cerebras.ai/v1/completions")
+# Initialize LLM providers
+def initialize_llm_providers():
+    """Initialize and register all LLM providers."""
+    # Register provider classes
+    LLMProviderFactory.register_provider("cerebras", CerebrasProvider)
+    LLMProviderFactory.register_provider("openai", OpenAIProvider)
+    LLMProviderFactory.register_provider("anthropic", AnthropicProvider)
+    LLMProviderFactory.register_provider("huggingface", HuggingFaceProvider)
+    
+    # Load providers from environment variables
+    LLMProviderFactory.load_providers_from_config()
+    
+    # Log available providers
+    available_providers = LLMProviderFactory.list_available_providers()
+    active_provider = os.getenv("DEFAULT_LLM_PROVIDER", "cerebras")
+    logger.info(f"Available LLM providers: {available_providers}")
+    logger.info(f"Active LLM provider: {active_provider}")
+
+# Initialize LLM providers
+initialize_llm_providers()
 
 # User model for authentication
 class User(UserMixin):
@@ -148,7 +169,17 @@ def logout():
 @app.route('/chat')
 @login_required
 def chat():
-    return render_template('chat.html', username=current_user.username)
+    # Get available LLM providers for the UI
+    available_providers = LLMProviderFactory.list_available_providers()
+    active_provider = LLMProviderFactory._active_provider or os.getenv("DEFAULT_LLM_PROVIDER", "cerebras")
+    
+    return render_template(
+        'chat.html', 
+        username=current_user.username,
+        available_providers=available_providers,
+        active_provider=active_provider,
+        enable_runtime_switching=os.getenv("ENABLE_RUNTIME_SWITCHING", "true").lower() == "true"
+    )
 
 @app.route('/api/chat', methods=['POST'])
 @login_required
@@ -156,6 +187,7 @@ def api_chat():
     data = request.json
     query = data.get('message', '')
     conversation_history = data.get('history', [])
+    provider_name = data.get('provider')  # Optional provider override
     
     # Get user session ID
     session_id = session.get('session_id')
@@ -168,18 +200,52 @@ def api_chat():
         results = query_weaviate(query)
         context = format_context(results)
         
-        # Generate response with Cerebras
-        response = generate_cerebras_response(query, context, conversation_history)
+        # Generate response with selected LLM provider
+        response = generate_llm_response(query, context, conversation_history, provider_name)
         
         return jsonify({
-            'answer': response.get('answer', 'Sorry, I could not generate a response.'),
-            'sources': response.get('sources', [])
+            'answer': response.get('text', 'Sorry, I could not generate a response.'),
+            'sources': response.get('sources', []),
+            'provider': response.get('provider', 'unknown')
         })
     except Exception as e:
         logger.error(f"Error processing chat query: {e}")
         return jsonify({
             'answer': f"An error occurred: {str(e)}",
-            'sources': []
+            'sources': [],
+            'provider': 'error'
+        }), 500
+
+@app.route('/api/switch_provider', methods=['POST'])
+@login_required
+def api_switch_provider():
+    """API endpoint to switch the active LLM provider."""
+    if os.getenv("ENABLE_RUNTIME_SWITCHING", "true").lower() != "true":
+        return jsonify({
+            'success': False,
+            'error': 'Runtime provider switching is disabled'
+        }), 403
+    
+    data = request.json
+    provider_name = data.get('provider')
+    
+    if not provider_name:
+        return jsonify({
+            'success': False,
+            'error': 'No provider specified'
+        }), 400
+    
+    success = LLMProviderFactory.set_active_provider(provider_name)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'provider': provider_name
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to switch to provider: {provider_name}'
         }), 500
 
 @app.route('/api/upload', methods=['POST'])
@@ -294,7 +360,7 @@ def query_weaviate(query, limit=5):
 
 def format_context(results):
     """
-    Format Weaviate results into context for Cerebras.
+    Format Weaviate results into context for LLM.
     
     Args:
         results: List of Weaviate results
@@ -323,17 +389,18 @@ def format_context(results):
     
     return "\n".join(context_parts)
 
-def generate_cerebras_response(query, context, conversation_history):
+def generate_llm_response(query, context, conversation_history, provider_name=None):
     """
-    Generate response using Cerebras API.
+    Generate response using the configured LLM provider with fallback.
     
     Args:
         query: User query
         context: Retrieved context
         conversation_history: Previous conversation
+        provider_name: Optional provider override
         
     Returns:
-        Generated response
+        Generated response with metadata
     """
     try:
         # Format conversation history
@@ -359,52 +426,60 @@ QUESTION: {query}
 
 ANSWER:"""
 
-        # Call Cerebras API
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {cerebras_api_key}"
-        }
-        
-        response = requests.post(
-            cerebras_api_url,
-            headers=headers,
-            json={
-                "model": "cerebras/Cerebras-GPT-4.5-8B",
-                "prompt": prompt,
-                "max_tokens": 1024,
-                "temperature": 0.2,
-                "top_p": 0.9
-            },
-            timeout=60
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            answer = result.get("choices", [{}])[0].get("text", "").strip()
-            
-            # Extract sources from context
-            sources = []
-            for result in results:
-                source = result.get("source", "")
-                if source and source not in sources:
-                    sources.append(source)
-            
-            return {
-                "answer": answer,
-                "sources": sources
-            }
+        # For OpenAI and Anthropic, format as messages
+        messages = [
+            {"role": "system", "content": "You are an AI assistant for answering questions about financial engineering and statistics based on Ruppert's book."},
+            {"role": "user", "content": f"""Use the following pieces of context to answer my question.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+CONTEXT:
+{context}
+
+CONVERSATION HISTORY:
+{formatted_history}
+
+QUESTION: {query}"""}
+        ]
+
+        # Generate response with specified or active provider
+        if provider_name:
+            # Try to use specified provider
+            provider = LLMProviderFactory.get_provider(provider_name)
+            if provider and provider.is_available():
+                if provider_name in ["openai", "anthropic"]:
+                    response = provider.generate("", messages=messages)
+                else:
+                    response = provider.generate(prompt)
+            else:
+                # Fall back to factory with fallback
+                response_with_meta = LLMProviderFactory.generate_with_fallback(prompt, messages=messages)
+                response = response_with_meta.get("result", {})
+                provider_name = response_with_meta.get("provider")
         else:
-            logger.error(f"Cerebras API error: {response.text}")
-            return {
-                "answer": "Sorry, I encountered an error while generating a response.",
-                "sources": []
-            }
+            # Use factory with fallback
+            response_with_meta = LLMProviderFactory.generate_with_fallback(prompt, messages=messages)
+            response = response_with_meta.get("result", {})
+            provider_name = response_with_meta.get("provider")
+        
+        # Extract sources from context
+        sources = []
+        for result in results:
+            source = result.get("source", "")
+            if source and source not in sources:
+                sources.append(source)
+        
+        # Add sources to response
+        response["sources"] = sources
+        response["provider"] = provider_name
+        
+        return response
             
     except Exception as e:
-        logger.error(f"Error generating Cerebras response: {e}")
+        logger.error(f"Error generating LLM response: {e}")
         return {
-            "answer": f"An error occurred: {str(e)}",
-            "sources": []
+            "text": f"An error occurred: {str(e)}",
+            "sources": [],
+            "provider": "error"
         }
 
 if __name__ == '__main__':
