@@ -12,7 +12,15 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 # Import base processor
-from .base_processor import BaseDocumentProcessor
+try:
+    from .base_processor import BaseDocumentProcessor
+except ImportError:
+    # Fallback for when module structure isn't recognized
+    import sys
+    import os
+    # Absolute import as a last resort
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from plugins.base_processor import BaseDocumentProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -58,26 +66,38 @@ class PDFProcessor(BaseDocumentProcessor):
             'content' and 'metadata' keys
         """
         try:
-            # Import PyMuPDF here to avoid dependency issues if not installed
-            import fitz  # PyMuPDF
+            # First try PyMuPDF if available, otherwise use pypdf
+            try:
+                import fitz  # PyMuPDF
+                use_fitz = True
+            except ImportError:
+                from pypdf import PdfReader
+                use_fitz = False
+                logger.info("Using pypdf as fallback for PDF processing")
             
             file_path = Path(file_path)
             chunks = []
             
             # Extract text from PDF
-            doc = fitz.open(file_path)
-            
-            # Get document metadata
             metadata = {
                 "source": file_path.name,
                 "file_type": "pdf",
-                "page_count": len(doc),
-                "title": doc.metadata.get("title", ""),
-                "author": doc.metadata.get("author", ""),
-                "subject": doc.metadata.get("subject", ""),
-                "keywords": doc.metadata.get("keywords", ""),
                 "processor": "pdf_processor"
             }
+            
+            # Process using the appropriate library
+            if use_fitz:
+                # Use PyMuPDF
+                doc = fitz.open(file_path)
+                
+                # Get document metadata
+                metadata.update({
+                    "page_count": len(doc),
+                    "title": doc.metadata.get("title", ""),
+                    "author": doc.metadata.get("author", ""),
+                    "subject": doc.metadata.get("subject", ""),
+                    "keywords": doc.metadata.get("keywords", "")
+                })
             
             # Process each page
             current_chunk = {"content": "", "metadata": metadata.copy()}
@@ -85,53 +105,106 @@ class PDFProcessor(BaseDocumentProcessor):
             chunk_size = self.get_chunk_size()
             chunk_overlap = self.get_chunk_overlap()
             
-            for page_num, page in enumerate(doc):
-                text = page.get_text()
-                
-                # Skip empty pages
-                if not text.strip():
-                    continue
-                
-                # Update metadata with page number
-                page_metadata = metadata.copy()
-                page_metadata["page_number"] = page_num + 1
-                
-                # Extract images if configured
-                if self.get_setting("extract_images", False):
-                    image_list = page.get_images(full=True)
-                    for img_index, img in enumerate(image_list):
-                        xref = img[0]
-                        base_image = doc.extract_image(xref)
-                        if base_image:
-                            # Here we could save the image or process it further
-                            # For now, just note it in the metadata
-                            page_metadata[f"has_image_{img_index}"] = True
-                
-                # Process text with chunking
-                paragraphs = re.split(r'\n\s*\n', text)
-                
-                for para in paragraphs:
-                    para = para.strip()
-                    if not para:
+            if use_fitz:
+                # Process with PyMuPDF
+                for page_num, page in enumerate(doc):
+                    text = page.get_text()
+                    
+                    # Skip empty pages
+                    if not text.strip():
                         continue
                     
-                    # If adding this paragraph would exceed chunk size, save current chunk and start a new one
-                    if current_chunk_size + len(para) > chunk_size and current_chunk["content"]:
-                        chunks.append(current_chunk)
-                        
-                        # Start new chunk with overlap
-                        overlap_text = current_chunk["content"][-chunk_overlap:] if chunk_overlap > 0 else ""
-                        current_chunk = {
-                            "content": overlap_text,
-                            "metadata": page_metadata.copy()
-                        }
-                        current_chunk_size = len(overlap_text)
+                    # Update metadata with page number
+                    page_metadata = metadata.copy()
+                    page_metadata["page_number"] = page_num + 1
                     
-                    # Add paragraph to current chunk
-                    if current_chunk["content"]:
-                        current_chunk["content"] += "\n\n"
-                    current_chunk["content"] += para
-                    current_chunk_size = len(current_chunk["content"])
+                    # Extract images if configured
+                    if self.get_setting("extract_images", False):
+                        image_list = page.get_images(full=True)
+                        for img_index, img in enumerate(image_list):
+                            xref = img[0]
+                            base_image = doc.extract_image(xref)
+                            if base_image:
+                                # Here we could save the image or process it further
+                                # For now, just note it in the metadata
+                                page_metadata[f"has_image_{img_index}"] = True
+                    
+                    # Process text with chunking
+                    paragraphs = re.split(r'\n\s*\n', text)
+                    
+                    for para in paragraphs:
+                        para = para.strip()
+                        if not para:
+                            continue
+                        
+                        # If adding this paragraph would exceed chunk size, save current chunk and start a new one
+                        if current_chunk_size + len(para) > chunk_size and current_chunk["content"]:
+                            chunks.append(current_chunk)
+                            
+                            # Start new chunk with overlap
+                            overlap_text = current_chunk["content"][-chunk_overlap:] if chunk_overlap > 0 else ""
+                            current_chunk = {
+                                "content": overlap_text,
+                                "metadata": page_metadata.copy()
+                            }
+                            current_chunk_size = len(overlap_text)
+                        
+                        # Add paragraph to current chunk
+                        if current_chunk["content"]:
+                            current_chunk["content"] += "\n\n"
+                        current_chunk["content"] += para
+                        current_chunk_size = len(current_chunk["content"])
+            else:
+                # Process with pypdf
+                reader = PdfReader(file_path)
+                metadata["page_count"] = len(reader.pages)
+                
+                # Try to get metadata
+                if reader.metadata:
+                    if reader.metadata.title:
+                        metadata["title"] = reader.metadata.title
+                    if reader.metadata.author:
+                        metadata["author"] = reader.metadata.author
+                    if reader.metadata.subject:
+                        metadata["subject"] = reader.metadata.subject
+                
+                # Process each page
+                for page_num, page in enumerate(reader.pages):
+                    text = page.extract_text() or ""
+                    
+                    # Skip empty pages
+                    if not text.strip():
+                        continue
+                    
+                    # Update metadata with page number
+                    page_metadata = metadata.copy()
+                    page_metadata["page_number"] = page_num + 1
+                    
+                    # Process text with chunking
+                    paragraphs = re.split(r'\n\s*\n', text)
+                    
+                    for para in paragraphs:
+                        para = para.strip()
+                        if not para:
+                            continue
+                        
+                        # If adding this paragraph would exceed chunk size, save current chunk and start a new one
+                        if current_chunk_size + len(para) > chunk_size and current_chunk["content"]:
+                            chunks.append(current_chunk)
+                            
+                            # Start new chunk with overlap
+                            overlap_text = current_chunk["content"][-chunk_overlap:] if chunk_overlap > 0 else ""
+                            current_chunk = {
+                                "content": overlap_text,
+                                "metadata": page_metadata.copy()
+                            }
+                            current_chunk_size = len(overlap_text)
+                        
+                        # Add paragraph to current chunk
+                        if current_chunk["content"]:
+                            current_chunk["content"] += "\n\n"
+                        current_chunk["content"] += para
+                        current_chunk_size = len(current_chunk["content"])
             
             # Add the last chunk if not empty
             if current_chunk["content"]:
@@ -167,13 +240,13 @@ class PDFProcessor(BaseDocumentProcessor):
             return chunks
             
         except ImportError:
-            logger.error("PyMuPDF (fitz) is not installed. Cannot process PDF.")
+            logger.error("Both PyMuPDF (fitz) and pypdf are not installed. Cannot process PDF.")
             return [{
-                "content": "Error: PyMuPDF is not installed. Cannot process PDF.",
+                "content": "Error: PDF processing libraries are not installed.",
                 "metadata": {
                     "source": Path(file_path).name,
                     "file_type": "pdf",
-                    "error": "Missing dependency: PyMuPDF"
+                    "error": "Missing dependencies: PyMuPDF and pypdf"
                 }
             }]
         except Exception as e:
