@@ -1,5 +1,22 @@
 # Cerebras RAG App Troubleshooting Summary
 
+## Project Structure Understanding
+
+The project follows a modular architecture with:
+
+1. **Main Application Components** in `/src/`:
+   - `agent_core`: AI agent functionality
+   - `document_processor`: Document parsing and processing
+   - `llm_providers`: LLM integration (Cerebras, Anthropic, etc.)
+   - `code_executor`: Code execution service
+   - `webapp`: Web interface
+
+2. **Module Sharing Strategy**:
+   - The `/src/webapp/` directory contains symbolic links to parent directories
+   - This allows the webapp to import modules from parent directories
+   - Docker volumes mount the full `/src` directory into each container
+   - `PYTHONPATH` is set to include both `/app` and `/src`
+
 ## Docker Commands Used
 
 ### Container Inspection and Debugging
@@ -75,6 +92,11 @@ curl -v http://localhost:5000
 ### 3. Configured Static Files Directory
 - Created static directory in webapp container: `/app/static`
 
+### 4. Fixed Dockerfile Configuration
+- Updated Dockerfile to create only necessary directories
+- Simplified the Dockerfile to maintain symbolic links for module imports
+- Added static directory creation for nginx static files
+
 ## Modified Files
 
 ### 1. `/Users/macmachine/tools/drone_project_idea/Blogs/Cerebras/cerebras-rag-app/src/webapp/app.py`
@@ -86,6 +108,11 @@ curl -v http://localhost:5000
 ### 2. `/Users/macmachine/tools/drone_project_idea/Blogs/Cerebras/cerebras-rag-app/config/nginx.conf`
 - Added `client_max_body_size 100M;` directive to increase the upload limit
 
+### 3. `/Users/macmachine/tools/drone_project_idea/Blogs/Cerebras/cerebras-rag-app/src/webapp/Dockerfile`
+- Simplified directory creation
+- Added static directory for nginx
+- Maintained Python path configuration
+
 ## Troubleshooting Process
 1. Identified missing routes in Flask app causing 502 errors
 2. Fixed app.py by adding missing routes
@@ -94,6 +121,7 @@ curl -v http://localhost:5000
 5. Identified file upload size limitations
 6. Modified nginx and Flask configurations to allow larger uploads
 7. Added better error handling and logging
-8. Rebuilt and restarted the affected containers
+8. Updated Dockerfile to simplify directory structure
+9. Rebuilt and restarted the affected containers
 
 The application is now fully functional with all routes working properly and supporting file uploads up to 100MB.
