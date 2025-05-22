@@ -193,7 +193,7 @@
                     <button class="btn btn-primary w-100" id="uploadBtn">
                         <i class="bi bi-upload"></i> Upload Document
                     </button>
-                    <input type="file" id="fileUpload" style="display: none;" accept=".pdf,.docx,.txt,.md,.csv,.html">
+                    <input type="file" id="fileUpload" style="display: none;">
                 </div>
                 
                 <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
@@ -217,32 +217,6 @@
                             <i class="bi bi-file-earmark-text"></i>
                             Ruppert's Book
                         </a>
-                    </li>
-                </ul>
-                
-                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
-                    <span>Agent Controls</span>
-                </h6>
-                <ul class="nav flex-column mb-2">
-                    <li class="nav-item">
-                        <button class="btn btn-sm btn-outline-secondary w-100 mb-2" id="agentStatusBtn">
-                            <i class="bi bi-info-circle"></i> Agent Status
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="btn btn-sm btn-outline-primary w-100 mb-2" id="startAgentBtn">
-                            <i class="bi bi-play-fill"></i> Start Agent
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="btn btn-sm btn-outline-danger w-100 mb-2" id="stopAgentBtn">
-                            <i class="bi bi-stop-fill"></i> Stop Agent
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="btn btn-sm btn-outline-success w-100 mb-2" id="setGoalBtn">
-                            <i class="bi bi-bullseye"></i> Set Agent Goal
-                        </button>
                     </li>
                 </ul>
             </div>
@@ -287,64 +261,6 @@
         </div>
     </div>
     
-    <!-- Agent Status Modal -->
-    <div class="modal fade" id="agentStatusModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Agent Status</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="agentStatusContent">
-                        <p>Loading agent status...</p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" id="refreshAgentStatusBtn">Refresh</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Set Agent Goal Modal -->
-    <div class="modal fade" id="setGoalModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Set Agent Goal</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="goalForm">
-                        <div class="mb-3">
-                            <label for="goalDescription" class="form-label">Goal Description</label>
-                            <textarea class="form-control" id="goalDescription" rows="3" placeholder="Describe what you want the agent to accomplish..."></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="goalPriority" class="form-label">Priority</label>
-                            <select class="form-select" id="goalPriority">
-                                <option value="1">Low</option>
-                                <option value="3" selected>Medium</option>
-                                <option value="5">High</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="goalDeadline" class="form-label">Deadline (Optional)</label>
-                            <input type="datetime-local" class="form-control" id="goalDeadline">
-                        </div>
-                    </form>
-                    <div id="goalStatus"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="submitGoalBtn">Set Goal</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
@@ -358,22 +274,6 @@
             const progressBar = document.querySelector('.progress-bar');
             const progress = document.querySelector('.progress');
             const uploadStatus = document.getElementById('uploadStatus');
-            
-            // Agent elements
-            const agentStatusBtn = document.getElementById('agentStatusBtn');
-            const startAgentBtn = document.getElementById('startAgentBtn');
-            const stopAgentBtn = document.getElementById('stopAgentBtn');
-            const setGoalBtn = document.getElementById('setGoalBtn');
-            const agentStatusModal = new bootstrap.Modal(document.getElementById('agentStatusModal'));
-            const agentStatusContent = document.getElementById('agentStatusContent');
-            const refreshAgentStatusBtn = document.getElementById('refreshAgentStatusBtn');
-            const setGoalModal = new bootstrap.Modal(document.getElementById('setGoalModal'));
-            const goalForm = document.getElementById('goalForm');
-            const goalDescription = document.getElementById('goalDescription');
-            const goalPriority = document.getElementById('goalPriority');
-            const goalDeadline = document.getElementById('goalDeadline');
-            const submitGoalBtn = document.getElementById('submitGoalBtn');
-            const goalStatus = document.getElementById('goalStatus');
             
             let conversationHistory = [];
             
@@ -397,35 +297,6 @@
                 if (fileUpload.files.length > 0) {
                     uploadFile(fileUpload.files[0]);
                 }
-            });
-            
-            // Agent button handlers
-            agentStatusBtn.addEventListener('click', function() {
-                fetchAgentStatus();
-                agentStatusModal.show();
-            });
-            
-            refreshAgentStatusBtn.addEventListener('click', fetchAgentStatus);
-            
-            startAgentBtn.addEventListener('click', function() {
-                startAgent();
-            });
-            
-            stopAgentBtn.addEventListener('click', function() {
-                stopAgent();
-            });
-            
-            setGoalBtn.addEventListener('click', function() {
-                // Reset the form
-                goalForm.reset();
-                goalStatus.innerHTML = '';
-                
-                // Show the modal
-                setGoalModal.show();
-            });
-            
-            submitGoalBtn.addEventListener('click', function() {
-                submitGoal();
             });
             
             function sendMessage() {
@@ -588,251 +459,41 @@
             }
             
             function uploadFile(file) {
-                console.log('Starting file upload for:', file.name);
-                
-                // Create a completely new FormData instance
                 const formData = new FormData();
-                
-                // Add the file to the form data - this is the simplest approach
                 formData.append('file', file);
                 
-                // Show upload modal with simple status
+                // Show upload modal
                 uploadModal.show();
                 progress.style.display = 'block';
                 progressBar.style.width = '0%';
-                uploadStatus.innerHTML = '<div class="alert alert-info">Uploading file...</div>';
+                uploadStatus.textContent = 'Uploading...';
                 
-                // Simple progress simulation
-                let progressVal = 0;
-                const progressInterval = setInterval(() => {
-                    progressVal += 5;
-                    if (progressVal <= 90) {
-                        progressBar.style.width = `${progressVal}%`;
-                    }
-                }, 250);
-                
-                // Use simple fetch request with minimal processing
+                // Upload file
                 fetch('/api/upload', {
                     method: 'POST',
                     body: formData
                 })
-                .then(response => {
-                    clearInterval(progressInterval);
-                    progressBar.style.width = '100%';
-                    
-                    // Always try to parse JSON response
-                    return response.json().catch(() => {
-                        // If JSON parsing fails, return a generic error
-                        return { success: false, error: `Server returned status ${response.status}` };
-                    }).then(data => {
-                        // Add response status to data for error handling
-                        return { ...data, status: response.status };
-                    });
-                })
+                .then(response => response.json())
                 .then(data => {
-                    console.log('Upload response:', data);
-                    
                     if (data.success) {
-                        // Success case
-                        uploadStatus.innerHTML = `<div class="alert alert-success">${data.message || 'File uploaded successfully'}</div>`;
+                        progressBar.style.width = '100%';
+                        uploadStatus.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
                         
-                        // Add success message to chat
+                        // Add system message to chat
                         setTimeout(() => {
-                            addMessage(`✅ Document "${file.name}" has been uploaded and processed. You can now ask questions about it.`, 'assistant');
-                            uploadModal.hide();
-                        }, 1500);
+                            addMessage(`Document "${file.name}" has been uploaded and processed. You can now ask questions about it.`, 'assistant');
+                        }, 1000);
                     } else {
-                        // Error case from server
-                        const errorMsg = data.error || 'Upload failed with an unknown error';
-                        uploadStatus.innerHTML = `<div class="alert alert-danger">${errorMsg}</div>`;
-                        
-                        // Add error to chat
-                        addMessage(`❌ Error uploading "${file.name}": ${errorMsg}`, 'assistant');
+                        progressBar.style.width = '100%';
+                        uploadStatus.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
                     }
                 })
                 .catch(error => {
-                    // Handle network/connection errors
-                    clearInterval(progressInterval);
                     progressBar.style.width = '100%';
-                    
-                    console.error('Upload failed:', error);
-                    
-                    uploadStatus.innerHTML = `<div class="alert alert-danger">Network error during upload</div>`;
-                    addMessage(`❌ Failed to upload "${file.name}": Network or connection error`, 'assistant');
-                });
-            }
-            
-            // Agent functions
-            function fetchAgentStatus() {
-                agentStatusContent.innerHTML = '<p>Loading agent status...</p>';
-                
-                fetch('/api/agent/status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Format the status information
-                        const status = data.status;
-                        const running = status.running ? 'Running' : 'Stopped';
-                        const runningClass = status.running ? 'text-success' : 'text-danger';
-                        
-                        let html = `
-                            <div class="card mb-3">
-                                <div class="card-body">
-                                    <h5 class="card-title">Agent Status: <span class="${runningClass}">${running}</span></h5>
-                                    <p class="card-text">Last updated: ${new Date(status.last_updated).toLocaleString()}</p>
-                                </div>
-                            </div>
-                            
-                            <div class="card mb-3">
-                                <div class="card-header">Goals</div>
-                                <ul class="list-group list-group-flush">
-                                    <li class="list-group-item">Active: ${status.goals.active}</li>
-                                    <li class="list-group-item">Completed: ${status.goals.completed}</li>
-                                    <li class="list-group-item">Failed: ${status.goals.failed}</li>
-                                    <li class="list-group-item">Total: ${status.goals.total}</li>
-                                </ul>
-                            </div>
-                        `;
-                        
-                        // Add performance information if available
-                        if (status.performance) {
-                            const perf = status.performance;
-                            html += `
-                                <div class="card">
-                                    <div class="card-header">Performance</div>
-                                    <ul class="list-group list-group-flush">
-                            `;
-                            
-                            // Tasks
-                            if (perf.tasks) {
-                                html += `
-                                    <li class="list-group-item">Tasks completed: ${perf.tasks.completed}</li>
-                                    <li class="list-group-item">Tasks failed: ${perf.tasks.failed}</li>
-                                `;
-                                
-                                if (perf.tasks.average_completion_time) {
-                                    html += `<li class="list-group-item">Average task time: ${perf.tasks.average_completion_time.toFixed(2)}s</li>`;
-                                }
-                            }
-                            
-                            // Actions
-                            if (perf.actions) {
-                                html += `
-                                    <li class="list-group-item">Actions successful: ${perf.actions.successful}</li>
-                                    <li class="list-group-item">Actions failed: ${perf.actions.failed}</li>
-                                `;
-                                
-                                if (perf.actions.success_rate !== null) {
-                                    html += `<li class="list-group-item">Action success rate: ${(perf.actions.success_rate * 100).toFixed(1)}%</li>`;
-                                }
-                            }
-                            
-                            html += `
-                                    </ul>
-                                </div>
-                            `;
-                        }
-                        
-                        agentStatusContent.innerHTML = html;
-                    } else {
-                        agentStatusContent.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
-                    }
-                })
-                .catch(error => {
-                    agentStatusContent.innerHTML = '<div class="alert alert-danger">An error occurred while fetching agent status</div>';
+                    uploadStatus.innerHTML = '<div class="alert alert-danger">An error occurred during upload.</div>';
                     console.error('Error:', error);
                 });
             }
-            
-            function startAgent() {
-                fetch('/api/agent/start', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        addMessage('Agent started successfully!', 'assistant');
-                    } else {
-                        addMessage(`Failed to start agent: ${data.error}`, 'assistant');
-                    }
-                })
-                .catch(error => {
-                    addMessage('An error occurred while starting the agent', 'assistant');
-                    console.error('Error:', error);
-                });
-            }
-            
-            function stopAgent() {
-                fetch('/api/agent/stop', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        addMessage('Agent stopped successfully!', 'assistant');
-                    } else {
-                        addMessage(`Failed to stop agent: ${data.error}`, 'assistant');
-                    }
-                })
-                .catch(error => {
-                    addMessage('An error occurred while stopping the agent', 'assistant');
-                    console.error('Error:', error);
-                });
-            }
-            
-            function submitGoal() {
-                const description = goalDescription.value.trim();
-                const priority = parseInt(goalPriority.value);
-                const deadline = goalDeadline.value ? new Date(goalDeadline.value).toISOString() : null;
-                
-                if (!description) {
-                    goalStatus.innerHTML = '<div class="alert alert-danger">Please provide a goal description</div>';
-                    return;
-                }
-                
-                // Show loading
-                goalStatus.innerHTML = '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-                
-                // Send to backend
-                fetch('/api/agent/goal', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        description: description,
-                        priority: priority,
-                        deadline: deadline
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        goalStatus.innerHTML = `<div class="alert alert-success">Goal set successfully with ID: ${data.goal_id}</div>`;
-                        
-                        // Add a message to the chat
-                        setTimeout(() => {
-                            setGoalModal.hide();
-                            addMessage(`New goal assigned to the agent: "${description}" (Priority: ${priority}, ID: ${data.goal_id})`, 'assistant');
-                        }, 1500);
-                    } else {
-                        goalStatus.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
-                    }
-                })
-                .catch(error => {
-                    goalStatus.innerHTML = '<div class="alert alert-danger">An error occurred while setting the goal</div>';
-                    console.error('Error:', error);
-                });
-            }
-            
-            // Add a welcome message to the chat
-            addMessage('Welcome to the Cerebras RAG system for Ruppert\'s Financial Engineering book. How can I help you today?', 'assistant');
         });
     </script>
 </body>

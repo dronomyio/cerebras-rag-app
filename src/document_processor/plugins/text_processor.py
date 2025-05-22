@@ -12,15 +12,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 # Import base processor
-try:
-    from .base_processor import BaseDocumentProcessor
-except ImportError:
-    # Fallback for when module structure isn't recognized
-    import sys
-    import os
-    # Absolute import as a last resort
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from plugins.base_processor import BaseDocumentProcessor
+from .base_processor import BaseDocumentProcessor
 
 logger = logging.getLogger(__name__)
 

@@ -1,17 +1,14 @@
-#!/usr/bin/env python3
 """
-Planning Module - Responsible for goal-oriented planning and task decomposition
+Hierarchical Planner Module
 
-This module provides planning capabilities for the autonomous agent, including
-goal representation, task decomposition, and plan execution monitoring.
+This module implements a pluggable hierarchical planning system that combines
+strategic planning (from Cerebras RAG) with tactical planning and task decomposition
+(from HuggingGPT).
 """
 
-import os
-import uuid
-import json
 import logging
-import datetime
-from typing import Dict, List, Any, Optional, Tuple
+import time
+from typing import Dict, List, Any, Optional, Union
 
 # Configure logging
 logging.basicConfig(
@@ -20,314 +17,430 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class PlanningModule:
+class BasePlanner:
+    """Base class for all planner implementations."""
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the base planner.
+        
+        Args:
+            config: Configuration dictionary for the planner
+        """
+        self.config = config or {}
+        self.llm_factory = None  # Will be set by Agent
+        logger.info(f"{self.__class__.__name__} initialized")
+    
+    def set_llm_factory(self, llm_factory: Any) -> None:
+        """
+        Set the LLM provider factory for the planner.
+        
+        Args:
+            llm_factory: LLM provider factory
+        """
+        self.llm_factory = llm_factory
+        logger.info(f"LLM factory set for {self.__class__.__name__}")
+    
+    def create_plan(self, goal: str, context: Any) -> Dict[str, Any]:
+        """
+        Create a plan to achieve the given goal.
+        
+        Args:
+            goal: User goal
+            context: Context information
+            
+        Returns:
+            Plan dictionary
+        """
+        raise NotImplementedError("Subclasses must implement create_plan")
+
+
+class StrategicPlanner(BasePlanner):
     """
-    Planning module for the autonomous agent.
-    
-    Responsible for creating, managing, and executing plans to achieve goals.
+    Strategic planner that creates high-level plans for achieving user goals.
+    Based on Cerebras RAG's planning approach.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def create_plan(self, goal: str, memory: Any) -> Dict[str, Any]:
         """
-        Initialize the planning module with configuration settings.
+        Create a high-level strategic plan to achieve the given goal.
         
         Args:
-            config: Dictionary containing planning configuration
-        """
-        self.config = config
-        self.plans = {}  # Store active plans
-        logger.info("Planning module initialized")
-    
-    def create_plan(self, goal: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create a plan to achieve the specified goal.
-        
-        Args:
-            goal: Goal object with id, description, priority, etc.
+            goal: User goal
+            memory: Memory module for context retrieval
             
         Returns:
-            plan: The created plan
+            Strategic plan
         """
-        plan_id = str(uuid.uuid4())
+        # Get relevant context from memory
+        context = memory.get_relevant_context(goal)
         
-        # Decompose the goal into tasks
-        tasks = self._decompose_goal(goal["description"])
+        # Create planning prompt
+        plan_template = self._get_strategic_planning_template()
+        plan_input = self._format_planning_input(goal, context)
         
-        plan = {
-            "id": plan_id,
-            "goal_id": goal["id"],
-            "status": "active",
-            "tasks": tasks,
-            "current_task_index": 0,
-            "created_at": datetime.datetime.now().isoformat(),
-            "completed_at": None,
-            "progress": 0.0
-        }
+        # Generate strategic plan using LLM
+        llm_provider = self.llm_factory.get_active_provider()
+        plan_output = llm_provider.generate(plan_template.format(input=plan_input))
         
-        self.plans[plan_id] = plan
-        logger.info(f"Created plan {plan_id} for goal {goal['id']}")
+        # Parse and structure the plan
+        structured_plan = self._parse_strategic_plan(plan_output.get("text", ""))
         
-        return plan
+        logger.info(f"Created strategic plan with {len(structured_plan.get('steps', []))} steps for goal: {goal[:50]}...")
+        
+        return structured_plan
     
-    def _decompose_goal(self, goal_description: str) -> List[Dict[str, Any]]:
+    def _get_strategic_planning_template(self) -> str:
+        """Get the template for strategic planning."""
+        return """
+        You are an AI assistant tasked with creating a strategic plan to achieve a user's goal.
+        Break down the goal into logical steps that can be executed sequentially.
+        
+        USER GOAL: {input}
+        
+        Create a strategic plan with 3-7 steps. For each step, provide:
+        1. A clear description of what needs to be done
+        2. The expected outcome of the step
+        3. Any dependencies on previous steps
+        
+        Format your response as a numbered list of steps.
         """
-        Decompose a goal into a sequence of tasks.
+    
+    def _format_planning_input(self, goal: str, context: str) -> str:
+        """Format the input for strategic planning."""
+        return f"""
+        GOAL: {goal}
+        
+        RELEVANT CONTEXT:
+        {context}
+        """
+    
+    def _parse_strategic_plan(self, plan_text: str) -> Dict[str, Any]:
+        """
+        Parse the LLM output into a structured strategic plan.
         
         Args:
-            goal_description: Description of the goal
+            plan_text: Raw text output from LLM
             
         Returns:
-            tasks: List of task objects
+            Structured strategic plan
         """
-        # In a real implementation, this would use LLM to decompose the goal
-        # For now, we'll use a simple placeholder implementation
+        # In a real implementation, this would use regex or more sophisticated parsing
+        # For this example, we'll create a simple structured plan
         
-        # Example task structure
-        tasks = [
-            {
-                "id": str(uuid.uuid4()),
-                "description": f"Analyze goal: {goal_description}",
-                "status": "pending",
-                "dependencies": [],
-                "estimated_duration": 300,  # seconds
-                "created_at": datetime.datetime.now().isoformat(),
-                "started_at": None,
-                "completed_at": None
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "description": f"Research information for: {goal_description}",
-                "status": "pending",
-                "dependencies": [0],  # Depends on the first task
-                "estimated_duration": 600,  # seconds
-                "created_at": datetime.datetime.now().isoformat(),
-                "started_at": None,
-                "completed_at": None
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "description": f"Execute actions for: {goal_description}",
-                "status": "pending",
-                "dependencies": [1],  # Depends on the second task
-                "estimated_duration": 900,  # seconds
-                "created_at": datetime.datetime.now().isoformat(),
-                "started_at": None,
-                "completed_at": None
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "description": f"Verify completion of: {goal_description}",
-                "status": "pending",
-                "dependencies": [2],  # Depends on the third task
-                "estimated_duration": 300,  # seconds
-                "created_at": datetime.datetime.now().isoformat(),
-                "started_at": None,
-                "completed_at": None
-            }
-        ]
+        lines = plan_text.strip().split('\n')
+        steps = []
         
-        return tasks
-    
-    def get_next_task(self, plan_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get the next task to execute from the plan.
-        
-        Args:
-            plan_id: ID of the plan
-            
-        Returns:
-            task: The next task to execute, or None if no tasks are ready
-        """
-        if plan_id not in self.plans:
-            logger.error(f"Plan {plan_id} not found")
-            return None
-        
-        plan = self.plans[plan_id]
-        
-        # If plan is not active, return None
-        if plan["status"] != "active":
-            return None
-        
-        # Find the next task that is ready to execute
-        for i, task in enumerate(plan["tasks"]):
-            if task["status"] == "pending":
-                # Check if all dependencies are completed
-                dependencies_met = True
-                for dep_idx in task["dependencies"]:
-                    if dep_idx >= len(plan["tasks"]) or plan["tasks"][dep_idx]["status"] != "completed":
-                        dependencies_met = False
-                        break
+        current_step = None
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
                 
-                if dependencies_met:
-                    # Update task status
-                    task["status"] = "in_progress"
-                    task["started_at"] = datetime.datetime.now().isoformat()
-                    plan["current_task_index"] = i
-                    return task
-        
-        # If we get here, no tasks are ready
-        return None
-    
-    def update_task_status(self, plan_id: str, task_id: str, status: str, 
-                          result: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Update the status of a task in the plan.
-        
-        Args:
-            plan_id: ID of the plan
-            task_id: ID of the task
-            status: New status of the task
-            result: Optional result of the task
-            
-        Returns:
-            success: Whether the update was successful
-        """
-        if plan_id not in self.plans:
-            logger.error(f"Plan {plan_id} not found")
-            return False
-        
-        plan = self.plans[plan_id]
-        
-        # Find the task
-        task_found = False
-        for task in plan["tasks"]:
-            if task["id"] == task_id:
-                task["status"] = status
+            # Check if this is a new step
+            if line[0].isdigit() and '.' in line[:5]:
+                if current_step:
+                    steps.append(current_step)
                 
-                if status == "completed":
-                    task["completed_at"] = datetime.datetime.now().isoformat()
-                    if result:
-                        task["result"] = result
-                
-                task_found = True
-                break
+                step_text = line.split('.', 1)[1].strip()
+                current_step = {
+                    "id": len(steps) + 1,
+                    "description": step_text,
+                    "expected_outcome": "",
+                    "dependencies": []
+                }
+            elif current_step and line.lower().startswith("outcome:"):
+                current_step["expected_outcome"] = line.split(":", 1)[1].strip()
+            elif current_step:
+                # Append to the current step description
+                current_step["description"] += " " + line
         
-        if not task_found:
-            logger.error(f"Task {task_id} not found in plan {plan_id}")
-            return False
-        
-        # Update plan progress
-        completed_tasks = sum(1 for task in plan["tasks"] if task["status"] == "completed")
-        plan["progress"] = completed_tasks / len(plan["tasks"])
-        
-        # Check if plan is completed
-        if all(task["status"] == "completed" for task in plan["tasks"]):
-            plan["status"] = "completed"
-            plan["completed_at"] = datetime.datetime.now().isoformat()
-            logger.info(f"Plan {plan_id} completed")
-        
-        return True
-    
-    def adapt_plan(self, plan_id: str, new_information: Dict[str, Any]) -> bool:
-        """
-        Adapt the plan based on new information.
-        
-        Args:
-            plan_id: ID of the plan
-            new_information: New information to consider
-            
-        Returns:
-            success: Whether the adaptation was successful
-        """
-        if plan_id not in self.plans:
-            logger.error(f"Plan {plan_id} not found")
-            return False
-        
-        plan = self.plans[plan_id]
-        
-        # In a real implementation, this would use LLM to adapt the plan
-        # For now, we'll use a simple placeholder implementation
-        logger.info(f"Adapting plan {plan_id} based on new information")
-        
-        # Example: Add a new task if certain conditions are met
-        if "requires_additional_research" in new_information and new_information["requires_additional_research"]:
-            new_task = {
-                "id": str(uuid.uuid4()),
-                "description": f"Additional research: {new_information.get('research_topic', 'unspecified')}",
-                "status": "pending",
-                "dependencies": [plan["current_task_index"]],
-                "estimated_duration": 600,  # seconds
-                "created_at": datetime.datetime.now().isoformat(),
-                "started_at": None,
-                "completed_at": None
-            }
-            
-            # Insert the new task after the current task
-            plan["tasks"].insert(plan["current_task_index"] + 1, new_task)
-            
-            # Update dependencies for subsequent tasks
-            for i in range(plan["current_task_index"] + 2, len(plan["tasks"])):
-                for j, dep in enumerate(plan["tasks"][i]["dependencies"]):
-                    if dep >= plan["current_task_index"] + 1:
-                        plan["tasks"][i]["dependencies"][j] += 1
-            
-            logger.info(f"Added new task to plan {plan_id}")
-            return True
-        
-        return False
-    
-    def get_plan_status(self, plan_id: str) -> Dict[str, Any]:
-        """
-        Get the status of a plan.
-        
-        Args:
-            plan_id: ID of the plan
-            
-        Returns:
-            status: Status of the plan
-        """
-        if plan_id not in self.plans:
-            logger.error(f"Plan {plan_id} not found")
-            return {"error": "Plan not found"}
-        
-        plan = self.plans[plan_id]
+        # Add the last step if it exists
+        if current_step:
+            steps.append(current_step)
         
         return {
-            "id": plan["id"],
-            "goal_id": plan["goal_id"],
-            "status": plan["status"],
-            "progress": plan["progress"],
-            "current_task_index": plan["current_task_index"],
-            "tasks_total": len(plan["tasks"]),
-            "tasks_completed": sum(1 for task in plan["tasks"] if task["status"] == "completed"),
-            "created_at": plan["created_at"],
-            "completed_at": plan["completed_at"]
+            "steps": steps,
+            "goal": plan_text.split('\n', 1)[0] if lines else ""
+        }
+
+
+class TacticalPlanner(BasePlanner):
+    """
+    Tactical planner that decomposes strategic steps into subtasks.
+    Based on HuggingGPT's task decomposition approach.
+    """
+    
+    def create_plan(self, strategic_step: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+        """
+        Create a tactical plan for executing a strategic step.
+        
+        Args:
+            strategic_step: Step from the strategic plan
+            memory: Memory module for context retrieval
+            
+        Returns:
+            Tactical plan with subtasks
+        """
+        # Get relevant context for this specific step
+        context = memory.get_relevant_context(strategic_step.get("description", ""))
+        
+        # Create tactical planning prompt
+        tactical_template = self._get_tactical_planning_template()
+        tactical_input = self._format_tactical_input(strategic_step, context)
+        
+        # Generate tactical plan using LLM
+        llm_provider = self.llm_factory.get_active_provider()
+        tactical_output = llm_provider.generate(tactical_template.format(input=tactical_input))
+        
+        # Parse and structure the tactical plan
+        tactical_plan = self._parse_tactical_plan(tactical_output.get("text", ""), strategic_step)
+        
+        # Identify required capabilities for each subtask
+        for subtask in tactical_plan.get("subtasks", []):
+            subtask["required_capabilities"] = self._identify_capabilities(subtask)
+        
+        logger.info(f"Created tactical plan with {len(tactical_plan.get('subtasks', []))} subtasks for step: {strategic_step.get('description', '')[:50]}...")
+        
+        return tactical_plan
+    
+    def _get_tactical_planning_template(self) -> str:
+        """Get the template for tactical planning."""
+        return """
+        You are an AI assistant tasked with breaking down a strategic step into specific subtasks
+        that can be executed by specialized AI models.
+        
+        STRATEGIC STEP: {input}
+        
+        Break this step down into 2-5 subtasks. For each subtask, specify:
+        1. A clear description of the subtask
+        2. The type of task (vision, code, math, text, audio)
+        3. The expected inputs and outputs
+        
+        Format your response as a numbered list of subtasks.
+        """
+    
+    def _format_tactical_input(self, strategic_step: Dict[str, Any], context: str) -> str:
+        """Format the input for tactical planning."""
+        return f"""
+        STEP DESCRIPTION: {strategic_step.get('description', '')}
+        EXPECTED OUTCOME: {strategic_step.get('expected_outcome', '')}
+        
+        RELEVANT CONTEXT:
+        {context}
+        """
+    
+    def _parse_tactical_plan(self, plan_text: str, strategic_step: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Parse the LLM output into a structured tactical plan.
+        
+        Args:
+            plan_text: Raw text output from LLM
+            strategic_step: The strategic step this tactical plan is for
+            
+        Returns:
+            Structured tactical plan with subtasks
+        """
+        lines = plan_text.strip().split('\n')
+        subtasks = []
+        
+        current_subtask = None
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if this is a new subtask
+            if line[0].isdigit() and '.' in line[:5]:
+                if current_subtask:
+                    subtasks.append(current_subtask)
+                
+                subtask_text = line.split('.', 1)[1].strip()
+                current_subtask = {
+                    "id": f"subtask_{strategic_step.get('id', 0)}_{len(subtasks) + 1}",
+                    "description": subtask_text,
+                    "type": "text",  # Default type
+                    "inputs": {},
+                    "expected_outputs": {}
+                }
+            elif current_subtask and "type:" in line.lower():
+                task_type = line.lower().split("type:", 1)[1].strip()
+                # Map to one of our supported types
+                if "vision" in task_type or "image" in task_type:
+                    current_subtask["type"] = "vision"
+                elif "code" in task_type or "program" in task_type:
+                    current_subtask["type"] = "code"
+                elif "math" in task_type or "calculation" in task_type:
+                    current_subtask["type"] = "math"
+                elif "audio" in task_type or "speech" in task_type:
+                    current_subtask["type"] = "audio"
+                else:
+                    current_subtask["type"] = "text"
+            elif current_subtask and "input:" in line.lower():
+                input_desc = line.split("input:", 1)[1].strip()
+                current_subtask["inputs"]["description"] = input_desc
+            elif current_subtask and "output:" in line.lower():
+                output_desc = line.split("output:", 1)[1].strip()
+                current_subtask["expected_outputs"]["description"] = output_desc
+            elif current_subtask:
+                # Append to the current subtask description
+                current_subtask["description"] += " " + line
+        
+        # Add the last subtask if it exists
+        if current_subtask:
+            subtasks.append(current_subtask)
+        
+        return {
+            "strategic_step_id": strategic_step.get("id", 0),
+            "subtasks": subtasks
         }
     
-    def save_plans(self, file_path: str) -> bool:
+    def _identify_capabilities(self, subtask: Dict[str, Any]) -> List[str]:
         """
-        Save all plans to a file.
+        Identify required capabilities for a subtask.
         
         Args:
-            file_path: Path to save the plans
+            subtask: Subtask information
             
         Returns:
-            success: Whether the save was successful
+            List of required capabilities
         """
-        try:
-            with open(file_path, 'w') as f:
-                json.dump(self.plans, f, indent=2)
-            logger.info(f"Plans saved to {file_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Error saving plans: {e}")
-            return False
+        task_type = subtask.get("type", "")
+        description = subtask.get("description", "").lower()
+        
+        capabilities = []
+        
+        # Add basic capability based on task type
+        if task_type == "vision":
+            capabilities.append("image_understanding")
+            
+            # Add more specific capabilities based on description
+            if "detect" in description or "object" in description:
+                capabilities.append("object_detection")
+            if "classify" in description:
+                capabilities.append("image_classification")
+            if "segment" in description:
+                capabilities.append("image_segmentation")
+            if "caption" in description or "describe" in description:
+                capabilities.append("image_captioning")
+                
+        elif task_type == "code":
+            capabilities.append("code_processing")
+            
+            # Add more specific capabilities based on description
+            if "execute" in description or "run" in description:
+                capabilities.append("code_execution")
+            if "generate" in description or "create" in description:
+                capabilities.append("code_generation")
+            if "complete" in description:
+                capabilities.append("code_completion")
+            if "debug" in description or "fix" in description:
+                capabilities.append("code_debugging")
+                
+        elif task_type == "math":
+            capabilities.append("mathematical_reasoning")
+            
+            # Add more specific capabilities based on description
+            if "equation" in description or "solve" in description:
+                capabilities.append("equation_solving")
+            if "statistic" in description or "probability" in description:
+                capabilities.append("statistical_analysis")
+            if "plot" in description or "graph" in description:
+                capabilities.append("mathematical_plotting")
+                
+        elif task_type == "audio":
+            capabilities.append("audio_processing")
+            
+            # Add more specific capabilities based on description
+            if "transcribe" in description or "speech to text" in description:
+                capabilities.append("speech_to_text")
+            if "recognize" in description or "identify" in description:
+                capabilities.append("audio_recognition")
+            if "generate" in description or "synthesize" in description:
+                capabilities.append("speech_synthesis")
+        
+        return capabilities
+
+
+class HierarchicalPlanner:
+    """
+    Hierarchical planner that combines strategic and tactical planning.
+    Integrates Cerebras RAG's strategic planning with HuggingGPT's task decomposition.
+    """
     
-    def load_plans(self, file_path: str) -> bool:
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
-        Load plans from a file.
+        Initialize the Hierarchical Planner.
         
         Args:
-            file_path: Path to load the plans from
+            config: Configuration dictionary for the planner
+        """
+        self.config = config or {}
+        self.strategic_planner = StrategicPlanner(self.config.get("strategic", {}))
+        self.tactical_planner = TacticalPlanner(self.config.get("tactical", {}))
+        self.llm_factory = None  # Will be set by Agent
+        logger.info("Hierarchical Planner initialized")
+    
+    def set_llm_factory(self, llm_factory: Any) -> None:
+        """
+        Set the LLM provider factory for the planner.
+        
+        Args:
+            llm_factory: LLM provider factory
+        """
+        self.llm_factory = llm_factory
+        self.strategic_planner.set_llm_factory(llm_factory)
+        self.tactical_planner.set_llm_factory(llm_factory)
+        logger.info("LLM factory set for Hierarchical Planner and sub-planners")
+    
+    def create_strategic_plan(self, goal: str, memory: Any) -> Dict[str, Any]:
+        """
+        Create a high-level strategic plan to achieve the given goal.
+        
+        Args:
+            goal: User goal
+            memory: Memory module for context retrieval
             
         Returns:
-            success: Whether the load was successful
+            Strategic plan
         """
-        try:
-            with open(file_path, 'r') as f:
-                self.plans = json.load(f)
-            logger.info(f"Plans loaded from {file_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Error loading plans: {e}")
-            return False
+        return self.strategic_planner.create_plan(goal, memory)
+    
+    def create_tactical_plan(self, strategic_step: Dict[str, Any], memory: Any) -> Dict[str, Any]:
+        """
+        Create a tactical plan for executing a strategic step.
+        
+        Args:
+            strategic_step: Step from the strategic plan
+            memory: Memory module for context retrieval
+            
+        Returns:
+            Tactical plan with subtasks
+        """
+        return self.tactical_planner.create_plan(strategic_step, memory)
+
+
+# Factory for creating different types of planners
+class PlannerFactory:
+    """Factory for creating different types of planners."""
+    
+    @staticmethod
+    def create_planner(planner_type: str, config: Optional[Dict[str, Any]] = None) -> BasePlanner:
+        """
+        Create a planner of the specified type.
+        
+        Args:
+            planner_type: Type of planner to create
+            config: Configuration dictionary for the planner
+            
+        Returns:
+            Planner instance
+        """
+        if planner_type == "strategic":
+            return StrategicPlanner(config)
+        elif planner_type == "tactical":
+            return TacticalPlanner(config)
+        elif planner_type == "hierarchical":
+            return HierarchicalPlanner(config)
+        else:
+            raise ValueError(f"Unknown planner type: {planner_type}")

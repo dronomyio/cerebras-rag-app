@@ -1,0 +1,162 @@
+# Agent Core Configuration
+
+# General agent configuration
+agent:
+  name: "Cerebras RAG Agent with HuggingGPT Integration"
+  version: "1.0.0"
+  description: "An advanced RAG agent with pluggable LLM providers and model orchestration"
+  
+  # Default components to use
+  default_components:
+    planner: "hierarchical"
+    memory: "multimodal"
+    decision: "enhanced"
+    monitoring: "comprehensive"
+    llm_provider: "cerebras"
+    model_orchestrator: "standard"
+
+# Planning module configuration
+planning:
+  # Strategic planner (Cerebras RAG style)
+  strategic:
+    max_steps: 7
+    planning_temperature: 0.2
+    
+  # Tactical planner (HuggingGPT style)
+  tactical:
+    max_subtasks: 5
+    planning_temperature: 0.3
+    
+  # Hierarchical planner (combined approach)
+  hierarchical:
+    strategic_config:
+      max_steps: 7
+      planning_temperature: 0.2
+    tactical_config:
+      max_subtasks: 5
+      planning_temperature: 0.3
+
+# Model orchestration configuration
+model_orchestration:
+  # Model selector configuration
+  selector_type: "hybrid"
+  selector:
+    capability_weight: 0.6
+    
+  # Task router configuration
+  router_type: "adaptive"
+  router:
+    format_history_size: 100
+    
+  # Available models by type
+  models:
+    vision:
+      - id: "vision_model_1"
+        name: "Image Analyzer Pro"
+        capabilities: ["image_understanding", "object_detection", "image_classification", "image_captioning"]
+        api_config:
+          endpoint: "${VISION_MODEL_1_ENDPOINT}"
+          api_key: "${VISION_MODEL_1_API_KEY}"
+      - id: "vision_model_2"
+        name: "Visual Insight Engine"
+        capabilities: ["image_understanding", "image_segmentation", "scene_recognition"]
+        api_config:
+          endpoint: "${VISION_MODEL_2_ENDPOINT}"
+          api_key: "${VISION_MODEL_2_API_KEY}"
+          
+    code:
+      - id: "code_model_1"
+        name: "Code Interpreter Plus"
+        capabilities: ["code_processing", "code_execution", "code_generation", "code_debugging"]
+        api_config:
+          endpoint: "${CODE_MODEL_1_ENDPOINT}"
+          api_key: "${CODE_MODEL_1_API_KEY}"
+      - id: "code_model_2"
+        name: "CodeX Analyzer"
+        capabilities: ["code_processing", "code_completion", "code_debugging"]
+        api_config:
+          endpoint: "${CODE_MODEL_2_ENDPOINT}"
+          api_key: "${CODE_MODEL_2_API_KEY}"
+          
+    math:
+      - id: "math_model_1"
+        name: "Statistical Reasoning Engine"
+        capabilities: ["mathematical_reasoning", "equation_solving", "statistical_analysis", "mathematical_plotting"]
+        api_config:
+          endpoint: "${MATH_MODEL_1_ENDPOINT}"
+          api_key: "${MATH_MODEL_1_API_KEY}"
+      - id: "math_model_2"
+        name: "MathSolver Pro"
+        capabilities: ["mathematical_reasoning", "equation_solving"]
+        api_config:
+          endpoint: "${MATH_MODEL_2_ENDPOINT}"
+          api_key: "${MATH_MODEL_2_API_KEY}"
+          
+    audio:
+      - id: "audio_model_1"
+        name: "AudioTranscribe Plus"
+        capabilities: ["audio_processing", "speech_to_text", "audio_recognition"]
+        api_config:
+          endpoint: "${AUDIO_MODEL_1_ENDPOINT}"
+          api_key: "${AUDIO_MODEL_1_API_KEY}"
+      - id: "audio_model_2"
+        name: "VoiceSynth Pro"
+        capabilities: ["audio_processing", "speech_synthesis"]
+        api_config:
+          endpoint: "${AUDIO_MODEL_2_ENDPOINT}"
+          api_key: "${AUDIO_MODEL_2_API_KEY}"
+          
+    text:
+      - id: "text_model_1"
+        name: "TextAnalyzer Pro"
+        capabilities: ["text_understanding", "text_generation", "summarization"]
+        api_config:
+          endpoint: "${TEXT_MODEL_1_ENDPOINT}"
+          api_key: "${TEXT_MODEL_1_API_KEY}"
+      - id: "text_model_2"
+        name: "NLP Insight Engine"
+        capabilities: ["text_understanding", "sentiment_analysis", "entity_recognition"]
+        api_config:
+          endpoint: "${TEXT_MODEL_2_ENDPOINT}"
+          api_key: "${TEXT_MODEL_2_API_KEY}"
+
+# Decision module configuration
+decision:
+  enhanced:
+    strategic_temperature: 0.2
+    model_selection_strategy: "performance_first"  # Options: capability_first, performance_first, balanced
+    fallback_enabled: true
+
+# LLM provider configuration
+llm_providers:
+  # Default provider to use
+  default_provider: "cerebras"
+  
+  # Fallback order if primary provider fails
+  fallback_order: ["openai", "anthropic", "huggingface"]
+  
+  # Provider-specific configurations
+  cerebras:
+    api_key: "${CEREBRAS_API_KEY}"
+    api_url: "${CEREBRAS_API_URL}"
+    model: "${CEREBRAS_MODEL}"
+    temperature: 0.2
+    max_tokens: 1024
+    
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    model: "gpt-4"
+    temperature: 0.2
+    max_tokens: 1024
+    
+  anthropic:
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "claude-2"
+    temperature: 0.2
+    max_tokens: 1024
+    
+  huggingface:
+    api_key: "${HUGGINGFACE_API_KEY}"
+    model: "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    temperature: 0.2
+    max_tokens: 1024

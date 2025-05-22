@@ -5,7 +5,7 @@
 enable_unstructured_io: true  # Set to false to disable Unstructured.io
 default_chunk_size: 1000
 default_chunk_overlap: 200
-max_file_size_mb: 1024  # 1GB
+max_file_size_mb: 50
 
 # Unstructured.io API configuration
 unstructured_io:
