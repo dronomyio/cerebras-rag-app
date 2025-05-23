@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   # Nginx for serving the web application
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "8088:80"
+      - "8443:443"
     volumes:
       - ./config/nginx.conf:/etc/nginx/conf.d/default.conf
       - ./data/certbot/conf:/etc/letsencrypt
@@ -29,9 +27,9 @@ services:
 
   # Weaviate vector database
   weaviate:
-    image: semitechnologies/weaviate:1.19.6
+    image: semitechnologies/weaviate:1.21.2
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
@@ -50,7 +48,7 @@ services:
 
   # Text2Vec Transformers for vectorization
   t2v-transformers:
-    image: semitechnologies/transformers-inference:sentence-transformers-multi-qa-mpnet-base-dot-v1
+    image: semitechnologies/transformers-inference:sentence-transformers-paraphrase-multilingual-mpnet-base-v2
     environment:
       ENABLE_CUDA: "0"
     networks:
@@ -65,10 +63,12 @@ services:
     volumes:
       - ./config:/app/config
       - ./data:/app/data
+      - ./src:/src
     environment:
       WEAVIATE_URL: http://weaviate:8080
       WEAVIATE_API_KEY: ${WEAVIATE_ADMIN_KEY}
       UNSTRUCTURED_API_KEY: ${UNSTRUCTURED_API_KEY}
+      PYTHONPATH: /app:/src
     networks:
       - cerebras-network
     restart: always
@@ -78,12 +78,17 @@ services:
     build:
       context: ./src/webapp
       dockerfile: Dockerfile
+    ports:
+      - "5678:5678"  # Debug port for VSCode
     volumes:
       - ./config:/app/config
       - ./data:/app/data
+      - ./src:/src
+      - ./src/webapp:/app  # Direct mount for easier debugging
     environment:
       FLASK_APP: app.py
-      FLASK_ENV: production
+      FLASK_ENV: development
+      FLASK_DEBUG: 1
       WEAVIATE_URL: http://weaviate:8080
       WEAVIATE_API_KEY: ${WEAVIATE_ADMIN_KEY}
       REDIS_HOST: redis
@@ -95,6 +100,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       WEBAPP_SECRET_KEY: ${WEBAPP_SECRET_KEY}
+      PYTHONPATH: /app:/src
     depends_on:
       - redis
       - weaviate
@@ -108,8 +114,11 @@ services:
     build:
       context: ./src/code_executor
       dockerfile: Dockerfile
+    volumes:
+      - ./src:/src
     environment:
       MAX_EXECUTION_TIME: 30
+      PYTHONPATH: /app:/src
     networks:
       - cerebras-network
     restart: always

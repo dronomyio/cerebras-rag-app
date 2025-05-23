@@ -23,10 +23,15 @@ logger = logging.getLogger(__name__)
 
 @app.route('/')
 def index():
+    # BREAKPOINT: Add a breakpoint here to debug the index route
+    logger.debug("Accessing index route")
     return render_template('login.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # BREAKPOINT: Add a breakpoint here to debug login logic
+    logger.debug(f"Login request method: {request.method}")
+    
     if request.method == 'POST':
         # For demo, always allow login
         return redirect(url_for('chat'))
@@ -34,6 +39,9 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    # BREAKPOINT: Add a breakpoint here to debug registration
+    logger.debug(f"Register request method: {request.method}")
+    
     if request.method == 'POST':
         # For demo, always redirect to login after registration
         return redirect(url_for('login'))
@@ -41,17 +49,25 @@ def register():
 
 @app.route('/logout')
 def logout():
+    # BREAKPOINT: Add a breakpoint here to debug logout
+    logger.debug("Logging out user")
+    
     # For demo, simply redirect to login page
     return redirect(url_for('login'))
 
 @app.route('/chat')
 def chat():
+    # BREAKPOINT: Add a breakpoint here to debug chat page
+    logger.debug("Accessing chat page")
+    
     return render_template('chat.html', username="Demo User")
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
+    # BREAKPOINT: Add a breakpoint here to debug chat API
     data = request.json
     query = data.get('message', '')
+    logger.debug(f"Chat API received query: {query}")
     
     # Demo response
     response = {
@@ -63,6 +79,9 @@ def api_chat():
 
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
+    # BREAKPOINT: Add a breakpoint here to debug file upload
+    logger.debug("File upload request received")
+    
     try:
         if 'file' not in request.files:
             logger.error("No file part in the request")
@@ -75,6 +94,8 @@ def api_upload():
         
         # Log file details
         logger.info(f"Received file: {file.filename}, Content-Type: {file.content_type}, Size: {request.content_length} bytes")
+        
+        # BREAKPOINT: Add a breakpoint here to inspect the file object
         
         # Save the file (in a real app)
         # file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
@@ -92,9 +113,11 @@ def api_upload():
 
 @app.route('/api/execute_code', methods=['POST'])
 def api_execute_code():
+    # BREAKPOINT: Add a breakpoint here to debug code execution
     data = request.json
     code = data.get('code', '')
     language = data.get('language', 'python')
+    logger.debug(f"Executing {language} code")
     
     # Demo code execution
     return jsonify({
