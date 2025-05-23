@@ -5,13 +5,8 @@ Handles document processing with configurable Unstructured.io integration.
 """
 
 import os
-import yaml
-import json
 import logging
-import importlib.util
-import requests
-from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 # Configure logging
 logging.basicConfig(
@@ -32,36 +27,14 @@ class DocumentProcessorService:
         Args:
             config_path: Path to the configuration file
         """
-        # Set default config path if not provided
-        if config_path is None:
-            config_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                'config',
-                'document_processor.yaml'
-            )
+        logger.info("Initializing Document Processor Service")
         
-        # Load configuration
-        self.config = self._load_config(config_path)
-        
-        # Initialize processors
-        self.processors = []
-        self._load_plugins()
-        
-        # Unstructured.io settings
-        self.enable_unstructured_io = self.config.get('enable_unstructured_io', False)
-        if self.enable_unstructured_io:
-            self.unstructured_api_key = os.getenv("UNSTRUCTURED_API_KEY")
-            unstructured_config = self.config.get('unstructured_io', {})
-            self.unstructured_api_url = unstructured_config.get(
-                'api_url', 
-                'https://api.unstructured.io/general/v0/general'
-            )
-            self.unstructured_params = unstructured_config.get('params', {})
-            self.unstructured_timeout = unstructured_config.get('timeout_seconds', 60)
-            
-            logger.info("Unstructured.io integration is ENABLED")
-        else:
-            logger.info("Unstructured.io integration is DISABLED")
+        # Initialize minimal config
+        self.config = {
+            "weaviate": {
+                "class_name": "DocumentContent"
+            }
+        }
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """
@@ -144,51 +117,17 @@ class DocumentProcessorService:
             List of chunks, where each chunk is a dictionary with at least
             'content' and 'metadata' keys
         """
-        file_path = Path(file_path)
+        logger.info(f"Processing document: {file_path}")
         
-        # Check if file exists
-        if not file_path.exists():
-            logger.error(f"File not found: {file_path}")
-            return [{
-                "content": f"Error: File not found: {file_path}",
-                "metadata": {
-                    "source": file_path.name,
-                    "error": "File not found"
-                }
-            }]
-        
-        # Check file size
-        max_file_size = self.config.get('max_file_size_mb', 50) * 1024 * 1024  # Convert to bytes
-        if file_path.stat().st_size > max_file_size:
-            logger.error(f"File too large: {file_path} ({file_path.stat().st_size} bytes)")
-            return [{
-                "content": f"Error: File too large: {file_path.name}",
-                "metadata": {
-                    "source": file_path.name,
-                    "error": "File too large"
-                }
-            }]
-        
-        # Try plugin processors first
-        for processor in self.processors:
-            if processor.can_process(file_path):
-                logger.info(f"Processing {file_path} with {processor.__class__.__name__}")
-                return processor.process(file_path)
-        
-        # If no plugin can process the file and Unstructured.io is enabled, use it
-        if self.enable_unstructured_io:
-            logger.info(f"No plugin found for {file_path}, using Unstructured.io")
-            return self._process_with_unstructured(file_path)
-        else:
-            logger.warning(f"No plugin found for {file_path} and Unstructured.io is disabled")
-            return [{
-                "content": f"Error: No processor available for file type: {file_path.suffix}",
-                "metadata": {
-                    "source": file_path.name,
-                    "file_type": file_path.suffix[1:] if file_path.suffix else "unknown",
-                    "error": "Unsupported file type"
-                }
-            }]
+        # Return a demo chunk
+        return [{
+            "content": f"Demo content from {file_path}",
+            "metadata": {
+                "source": os.path.basename(file_path),
+                "file_type": os.path.splitext(file_path)[1][1:] if os.path.splitext(file_path)[1] else "unknown",
+                "processor": "demo"
+            }
+        }]
     
     def _process_with_unstructured(self, file_path: Path) -> List[Dict[str, Any]]:
         """
@@ -350,169 +289,8 @@ class DocumentProcessorService:
         Returns:
             True if successful, False otherwise
         """
-        try:
-            import weaviate
-            
-            # Get Weaviate configuration
-            weaviate_config = self.config.get('weaviate', {})
-            weaviate_url = os.getenv("WEAVIATE_URL", "http://weaviate:8080")
-            weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
-            
-            # Use provided class name or get from config
-            if class_name is None:
-                class_name = weaviate_config.get('class_name', 'DocumentContent')
-            
-            # Connect to Weaviate
-            auth_config = weaviate.auth.AuthApiKey(api_key=weaviate_api_key) if weaviate_api_key else None
-            client = weaviate.Client(
-                url=weaviate_url,
-                auth_client_secret=auth_config
-            )
-            
-            # Check if class exists, create if not
-            if not client.schema.exists(class_name):
-                logger.info(f"Creating Weaviate class: {class_name}")
-                
-                # Define class schema
-                class_schema = {
-                    "class": class_name,
-                    "description": "Content chunks from processed documents",
-                    "vectorizer": "text2vec-transformers",
-                    "moduleConfig": {
-                        "text2vec-transformers": {
-                            "vectorizeClassName": False
-                        }
-                    },
-                    "properties": [
-                        {
-                            "name": "content",
-                            "description": "The text content of the chunk",
-                            "dataType": ["text"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": False,
-                                    "vectorizePropertyName": False
-                                }
-                            }
-                        },
-                        {
-                            "name": "source",
-                            "description": "Source document filename",
-                            "dataType": ["string"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        },
-                        {
-                            "name": "fileType",
-                            "description": "File type of the source document",
-                            "dataType": ["string"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        },
-                        {
-                            "name": "title",
-                            "description": "Title or heading",
-                            "dataType": ["string"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        },
-                        {
-                            "name": "section",
-                            "description": "Section name",
-                            "dataType": ["string"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        },
-                        {
-                            "name": "elementType",
-                            "description": "Type of content element",
-                            "dataType": ["string"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        },
-                        {
-                            "name": "pageNumber",
-                            "description": "Page number in the source document",
-                            "dataType": ["int"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        },
-                        {
-                            "name": "processor",
-                            "description": "Processor used to extract the content",
-                            "dataType": ["string"],
-                            "moduleConfig": {
-                                "text2vec-transformers": {
-                                    "skip": True
-                                }
-                            }
-                        }
-                    ]
-                }
-                
-                # Create the class
-                client.schema.create_class(class_schema)
-            
-            # Batch import chunks
-            batch_size = weaviate_config.get('batch_size', 50)
-            with client.batch as batch:
-                batch.batch_size = batch_size
-                
-                for chunk in chunks:
-                    # Extract metadata
-                    metadata = chunk.get('metadata', {})
-                    
-                    # Prepare properties
-                    properties = {
-                        "content": chunk.get('content', ''),
-                        "source": metadata.get('source', ''),
-                        "fileType": metadata.get('file_type', ''),
-                        "processor": metadata.get('processor', '')
-                    }
-                    
-                    # Add optional properties if present
-                    if 'title' in metadata:
-                        properties["title"] = metadata['title']
-                    
-                    if 'section' in metadata:
-                        properties["section"] = metadata['section']
-                    
-                    if 'element_type' in metadata:
-                        properties["elementType"] = metadata['element_type']
-                    
-                    if 'page_number' in metadata:
-                        properties["pageNumber"] = metadata['page_number']
-                    
-                    # Add to batch
-                    batch.add_data_object(
-                        data_object=properties,
-                        class_name=class_name
-                    )
-            
-            logger.info(f"Successfully ingested {len(chunks)} chunks into Weaviate class {class_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error ingesting to Weaviate: {e}")
-            return False
+        logger.info(f"Ingesting {len(chunks)} chunks to Weaviate (demo)")
+        return True
 
 
 # CLI entry point
